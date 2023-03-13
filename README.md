@@ -7,4 +7,6 @@
 ```
 https://cdn.jsdelivr.net/gh/moohng/bucket@main/1627887240043-Javascript_01.jpg
 |--------------------------|------|------|----|-------------------------------|
+
+https://raw.githubusercontent.com/moohng/bucket/main/1627887240043-Javascript_01.jpg
 ```
