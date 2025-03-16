@@ -4,6 +4,7 @@ export class GitHubService {
   private octokit: Octokit;
   private owner: string;
   private repo: string;
+  private branch = 'oss'; // 使用固定的oss分支
 
   constructor(token: string, owner: string, repo: string) {
     this.octokit = new Octokit({ auth: token });
@@ -14,10 +15,34 @@ export class GitHubService {
   async init() {
     try {
       // 验证仓库访问权限
-      await this.octokit.repos.get({
+      const repoInfo = await this.octokit.repos.get({
         owner: this.owner,
         repo: this.repo,
       });
+
+      // 获取默认分支的最新commit
+      const mainBranch = await this.octokit.repos.getBranch({
+        owner: this.owner,
+        repo: this.repo,
+        branch: repoInfo.data.default_branch,
+      });
+
+      // 检查oss分支是否存在
+      try {
+        await this.octokit.repos.getBranch({
+          owner: this.owner,
+          repo: this.repo,
+          branch: this.branch,
+        });
+      } catch (error) {
+        // 如果分支不存在，创建它
+        await this.octokit.git.createRef({
+          owner: this.owner,
+          repo: this.repo,
+          ref: `refs/heads/${this.branch}`,
+          sha: mainBranch.data.commit.sha,
+        });
+      }
 
       // 确保 images 目录存在
       try {
@@ -25,12 +50,14 @@ export class GitHubService {
           owner: this.owner,
           repo: this.repo,
           path: 'images',
+          ref: this.branch,
         });
       } catch (error) {
         // 如果目录不存在，创建它
         await this.octokit.repos.createOrUpdateFileContents({
           owner: this.owner,
           repo: this.repo,
+          branch: this.branch,
           path: 'images/.gitkeep',
           message: 'Initialize images directory',
           content: '',
@@ -56,6 +83,7 @@ export class GitHubService {
       const response = await this.octokit.repos.createOrUpdateFileContents({
         owner: this.owner,
         repo: this.repo,
+        branch: this.branch,
         path,
         message: `Upload image: ${file.name}`,
         content,
@@ -70,8 +98,43 @@ export class GitHubService {
     }
   }
 
+  async deleteImage(path: string): Promise<{ success: boolean; sha: string }> {
+    try {
+      // 获取文件信息以获取sha
+      const fileInfo = await this.octokit.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path,
+        ref: this.branch
+      });
+
+      if ('sha' in fileInfo.data) {
+        // 删除文件
+        await this.octokit.repos.deleteFile({
+          owner: this.owner,
+          repo: this.repo,
+          branch: this.branch,
+          path,
+          message: `Delete image: ${path}`,
+          sha: fileInfo.data.sha
+        });
+        return { success: true, sha: fileInfo.data.sha };
+      }
+      return { success: false, sha: '' };
+    } catch (error: any) {
+      if (error.status === 404) {
+        throw new Error('文件不存在');
+      }
+      if (error.status === 403) {
+        throw new Error('无权限删除文件');
+      }
+      throw new Error('删除失败：' + (error.message || '未知错误'));
+    }
+  }
+
   private convertToCDN(sha: string, path: string): string {
-    return `https://cdn.jsdelivr.net/gh/${this.owner}/${this.repo}/${path}`;
+    // 使用oss分支的CDN地址
+    return `https://cdn.jsdelivr.net/gh/${this.owner}/${this.repo}@${this.branch}/${path}`;
   }
 
   private async convertFileToBase64(file: File): Promise<string> {
@@ -90,7 +153,8 @@ export class GitHubService {
     const response = await this.octokit.repos.getContent({
       owner: this.owner,
       repo: this.repo,
-      path: 'images'
+      path: 'images',
+      ref: this.branch
     });
 
     if (Array.isArray(response.data)) {

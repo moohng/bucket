@@ -89,11 +89,13 @@
       </div>
     </div>
   </div>
+  <Toast ref="toast" />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { GitHubService } from '../utils/github';
+import Toast from './Toast.vue';
 
 const images = ref<Array<{ name: string; url: string }>>([]);
 
@@ -124,7 +126,9 @@ const filteredImages = computed(() => {
   return result;
 });
 
-const handleUpload = async (options: UploadRequestOptions) => {
+const toast = ref();
+
+const handleUpload = async (options: any) => {
   try {
     uploading.value = true;
     const url = await githubService.uploadImage(options.file);
@@ -132,10 +136,10 @@ const handleUpload = async (options: UploadRequestOptions) => {
       name: options.file.name,
       url
     });
-    ElMessage.success('上传成功');
+    toast.value?.success('上传成功');
   } catch (error) {
     console.error(error);
-    ElMessage.error('上传失败');
+    toast.value?.error('上传失败');
   } finally {
     uploading.value = false;
   }
@@ -143,20 +147,31 @@ const handleUpload = async (options: UploadRequestOptions) => {
 
 const copyUrl = (url: string) => {
   navigator.clipboard.writeText(url);
-  ElMessage.success('链接已复制');
+  toast.value?.success('链接已复制');
 };
 
 const deleteImage = async (image: { name: string; url: string }) => {
   try {
-    await ElMessageBox.confirm(
-      '确定要删除这张图片吗？',
-      '警告',
-      { type: 'warning' }
-    );
-    // TODO: 实现删除功能
-    ElMessage.success('删除成功');
-  } catch {
-    // 用户取消删除
+    const path = `images/${image.name}`;
+    const confirmed = window.confirm('确定要删除这张图片吗？');
+    
+    if (confirmed) {
+      loading.value = true;
+      const { success, sha } = await githubService.deleteImage(path);
+      if (success) {
+        images.value = images.value.filter(img => img.name !== image.name);
+        const imgElements = document.querySelectorAll(`img[src*="${sha}"]`);
+        imgElements.forEach(img => {
+          img.setAttribute('src', '');
+        });
+        toast.value?.success('删除成功');
+      }
+    }
+  } catch (error: any) {
+    console.error('删除失败:', error);
+    toast.value?.error(error.message || '删除失败');
+  } finally {
+    loading.value = false;
   }
 };
 
