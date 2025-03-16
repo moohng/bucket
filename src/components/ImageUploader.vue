@@ -10,6 +10,12 @@
   </div>
 
   <div v-else class="space-y-4">
+    <!-- 目录管理 -->
+    <FolderManager
+      :service="githubService"
+      v-model:folder="currentFolder"
+    />
+    
     <!-- 上传区域 -->
     <div class="bg-white rounded-lg shadow p-4">
       <div
@@ -100,10 +106,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import { GitHubService } from '../utils/github';
 import Toast from './Toast.vue';
 import ImagePreview from './ImagePreview.vue';
+import FolderManager from './FolderManager.vue';
 
 const images = ref<Array<{ name: string; url: string }>>([]);
 
@@ -136,10 +143,12 @@ const filteredImages = computed(() => {
 
 const toast = ref();
 
+const currentFolder = ref('');
+
 const handleUpload = async (options: any) => {
   try {
     uploading.value = true;
-    const url = await githubService.uploadImage(options.file);
+    const url = await githubService.uploadImage(options.file, currentFolder.value);
     images.value.unshift({
       name: options.file.name,
       url
@@ -220,12 +229,23 @@ const closePreview = () => {
   previewVisible.value = false;
 };
 
+watch(currentFolder, async () => {
+  try {
+    loading.value = true;
+    images.value = await githubService.getImageList(currentFolder.value);
+  } catch (error) {
+    toast.value?.error('获取图片列表失败');
+  } finally {
+    loading.value = false;
+  }
+});
+
 onMounted(async () => {
   try {
     loading.value = true;
     await githubService.init();
     initialized.value = true;
-    images.value = await githubService.getImageList();
+    images.value = await githubService.getImageList(currentFolder.value);
   } catch (error: any) {
     initError.value = error.message;
     console.error('初始化失败:', error);

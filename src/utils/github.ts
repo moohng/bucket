@@ -75,10 +75,48 @@ export class GitHubService {
     }
   }
 
-  async uploadImage(file: File): Promise<string> {
+  async getFolders(): Promise<string[]> {
+    try {
+      const response = await this.octokit.repos.getContent({
+        owner: this.owner,
+        repo: this.repo,
+        path: 'images',
+        ref: this.branch
+      });
+
+      if (Array.isArray(response.data)) {
+        return response.data
+          .filter(item => item.type === 'dir')
+          .map(dir => dir.name);
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  async createFolder(name: string): Promise<boolean> {
+    try {
+      await this.octokit.repos.createOrUpdateFileContents({
+        owner: this.owner,
+        repo: this.repo,
+        branch: this.branch,
+        path: `images/${name}/.gitkeep`,
+        message: `Create folder: ${name}`,
+        content: '',
+      });
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  async uploadImage(file: File, folder?: string): Promise<string> {
     try {
       const content = await this.convertFileToBase64(file);
-      const path = `images/${Date.now()}-${file.name}`;
+      const path = folder 
+        ? `images/${folder}/${Date.now()}-${file.name}`
+        : `images/${Date.now()}-${file.name}`;
 
       const response = await this.octokit.repos.createOrUpdateFileContents({
         owner: this.owner,
@@ -149,19 +187,22 @@ export class GitHubService {
     });
   }
 
-  async getImageList(): Promise<Array<{ name: string; url: string }>> {
+  async getImageList(folder?: string): Promise<Array<{ name: string; url: string }>> {
+    const path = folder ? `images/${folder}` : 'images';
     const response = await this.octokit.repos.getContent({
       owner: this.owner,
       repo: this.repo,
-      path: 'images',
+      path,
       ref: this.branch
     });
 
     if (Array.isArray(response.data)) {
-      return response.data.map(file => ({
-        name: file.name,
-        url: this.convertToCDN(file.sha, file.path)
-      }));
+      return response.data
+        .filter(file => file.type === 'file' && file.name !== '.gitkeep')
+        .map(file => ({
+          name: file.name,
+          url: this.convertToCDN(file.sha, file.path)
+        }));
     }
     return [];
   }
