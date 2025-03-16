@@ -65,8 +65,9 @@
           <img
             :src="image.url"
             :alt="image.name"
-            class="w-full aspect-square object-cover"
+            class="w-full aspect-square object-cover cursor-zoom-in"
             loading="lazy"
+            @click="previewImage(image)"
           >
           <div class="p-2 bg-white">
             <p class="truncate text-sm" :title="image.name">{{ image.name }}</p>
@@ -90,12 +91,19 @@
     </div>
   </div>
   <Toast ref="toast" />
+  <ImagePreview
+    v-model:visible="previewVisible"
+    :url="previewUrl"
+    :name="previewName"
+    @close="closePreview"
+  />
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue';
 import { GitHubService } from '../utils/github';
 import Toast from './Toast.vue';
+import ImagePreview from './ImagePreview.vue';
 
 const images = ref<Array<{ name: string; url: string }>>([]);
 
@@ -197,6 +205,20 @@ const handleDrop = (e: DragEvent) => {
 
 const initialized = ref(false);
 const initError = ref('');
+
+const previewVisible = ref(false);
+const previewUrl = ref('');
+const previewName = ref('');
+
+const previewImage = (image: { name: string; url: string }) => {
+  previewUrl.value = image.url;
+  previewName.value = image.name;
+  previewVisible.value = true;
+};
+
+const closePreview = () => {
+  previewVisible.value = false;
+};
 
 onMounted(async () => {
   try {
