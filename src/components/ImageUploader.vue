@@ -108,6 +108,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue';
 import { GitHubService } from '../utils/github';
+import Compressor from 'compressorjs';
 import Toast from './Toast.vue';
 import ImagePreview from './ImagePreview.vue';
 import FolderManager from './FolderManager.vue';
@@ -145,12 +146,85 @@ const toast = ref();
 
 const currentFolder = ref('');
 
+const compressImage = (file: File): Promise<File> => {
+  return new Promise((resolve, reject) => {
+    new Compressor(file, {
+      quality: 0.6,
+      success(result) {
+        // Ensure result is a File object with original name
+        const compressedFile = new File([result], file.name, {
+          type: result.type,
+          lastModified: Date.now(),
+        });
+        resolve(compressedFile);
+      },
+      error(err) {
+        reject(err);
+      },
+    });
+  });
+};
+
+const compressWithTinyPNG = async (file: File): Promise<File> => {
+  const apiKey = import.meta.env.VITE_TINYPNG_API_KEY;
+  if (!apiKey) {
+    throw new Error('TinyPNG API key not configured');
+  }
+
+  try {
+    // 1. Upload to TinyPNG
+    const response = await fetch('https://api.tinify.com/shrink', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Basic ${btoa(`api:${apiKey}`)}`
+      },
+      body: file
+    });
+
+    if (!response.ok) {
+      throw new Error(`TinyPNG API Error: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    const outputUrl = data.output.url;
+
+    // 2. Download compressed image
+    const compressedResponse = await fetch(outputUrl);
+    const blob = await compressedResponse.blob();
+
+    return new File([blob], file.name, {
+      type: blob.type,
+      lastModified: Date.now()
+    });
+  } catch (error) {
+    console.error('TinyPNG compression failed:', error);
+    throw error;
+  }
+};
+
 const handleUpload = async (options: any) => {
   try {
     uploading.value = true;
-    const url = await githubService.uploadImage(options.file, currentFolder.value);
+    let compressedFile: File;
+
+    // Try TinyPNG first
+    try {
+      if (!import.meta.env.VITE_TINYPNG_API_KEY) {
+        throw new Error('Skip TinyPNG');
+      }
+      console.log('Starting TinyPNG compression...');
+      compressedFile = await compressWithTinyPNG(options.file);
+      console.log(`TinyPNG Success: ${(options.file.size / 1024).toFixed(2)}KB -> ${(compressedFile.size / 1024).toFixed(2)}KB`);
+    } catch (error) {
+      // Fallback to local compression
+      console.log('Falling back to local compression...');
+      compressedFile = await compressImage(options.file);
+      console.log(`Local Compression: ${(options.file.size / 1024).toFixed(2)}KB -> ${(compressedFile.size / 1024).toFixed(2)}KB`);
+    }
+
+    const url = await githubService.uploadImage(compressedFile, currentFolder.value);
     images.value.unshift({
-      name: options.file.name,
+      name: compressedFile.name,
       url
     });
     toast.value?.success('上传成功');
