@@ -194,12 +194,8 @@ const compressWithTinyPNG = async (file: File): Promise<File> => {
       throw new Error(`TinyPNG API Error: ${response.statusText}`);
     }
 
-    const data = await response.json();
-    const outputUrl = data.output.url;
-
-    // 2. Download compressed image
-    const compressedResponse = await fetch(outputUrl);
-    const blob = await compressedResponse.blob();
+    // 2. Get compressed image directly from response
+    const blob = await response.blob();
 
     return new File([blob], file.name, {
       type: blob.type,

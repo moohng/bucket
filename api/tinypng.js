@@ -27,7 +27,16 @@ export default async function handler(request, response) {
     }
 
     const data = await tinypngResponse.json();
-    return response.status(200).json(data);
+    const outputUrl = data.output.url;
+
+    // Download the compressed image from TinyPNG
+    const imageResponse = await fetch(outputUrl);
+    const imageBuffer = await imageResponse.arrayBuffer();
+
+    // Return the image directly
+    response.setHeader('Content-Type', data.output.type);
+    response.setHeader('Content-Length', data.output.size);
+    return response.status(200).send(Buffer.from(imageBuffer));
 
   } catch (error) {
     console.error('Server Error:', error);
