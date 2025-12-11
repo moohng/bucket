@@ -166,11 +166,25 @@ const compressImage = (file: File): Promise<File> => {
 };
 
 const compressWithTinyPNG = async (file: File): Promise<File> => {
+  // Vercel Serverless Function Payload Limit is 4.5MB
+  const MAX_PAYLOAD_SIZE = 4.5 * 1024 * 1024;
+
+  if (file.size > MAX_PAYLOAD_SIZE) {
+    console.warn(`File size (${(file.size / 1024 / 1024).toFixed(2)}MB) exceeds Vercel proxy limit (4.5MB). Skipping TinyPNG.`);
+    throw new Error('File too large for Vercel Proxy');
+  }
+
   try {
+    // Convert file to ArrayBuffer to ensure robust binary transmission
+    const arrayBuffer = await file.arrayBuffer();
+
     // 1. Upload to local proxy api
     const response = await fetch('/api/tinypng', {
       method: 'POST',
-      body: file
+      headers: {
+        'Content-Type': 'application/octet-stream'
+      },
+      body: arrayBuffer
     });
 
     if (!response.ok) {

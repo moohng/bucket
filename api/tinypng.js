@@ -15,7 +15,7 @@ export default async function handler(request, response) {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${btoa(`api:${apiKey}`)}`,
-        'Content-Type': request.headers['content-type'] || 'application/octet-stream',
+        'Content-Type': 'application/octet-stream',
       },
       body: request.body,
     });
