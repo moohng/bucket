@@ -113,7 +113,7 @@ import Toast from './Toast.vue';
 import ImagePreview from './ImagePreview.vue';
 import FolderManager from './FolderManager.vue';
 
-const images = ref<Array<{ name: string; url: string }>>([]);
+const images = ref<{ name: string; url: string }[]>([]);
 
 const githubService = new GitHubService(
   import.meta.env.VITE_GITHUB_TOKEN,
@@ -166,22 +166,17 @@ const compressImage = (file: File): Promise<File> => {
 };
 
 const compressWithTinyPNG = async (file: File): Promise<File> => {
-  const apiKey = import.meta.env.VITE_TINYPNG_API_KEY;
-  if (!apiKey) {
-    throw new Error('TinyPNG API key not configured');
-  }
-
   try {
-    // 1. Upload to TinyPNG
-    const response = await fetch('https://api.tinify.com/shrink', {
+    // 1. Upload to local proxy api
+    const response = await fetch('/api/tinypng', {
       method: 'POST',
-      headers: {
-        'Authorization': `Basic ${btoa(`api:${apiKey}`)}`
-      },
       body: file
     });
 
     if (!response.ok) {
+      if (response.status === 404) {
+        throw new Error('API route not found (Local Environment)');
+      }
       throw new Error(`TinyPNG API Error: ${response.statusText}`);
     }
 
@@ -197,7 +192,6 @@ const compressWithTinyPNG = async (file: File): Promise<File> => {
       lastModified: Date.now()
     });
   } catch (error) {
-    console.error('TinyPNG compression failed:', error);
     throw error;
   }
 };
@@ -207,17 +201,14 @@ const handleUpload = async (options: any) => {
     uploading.value = true;
     let compressedFile: File;
 
-    // Try TinyPNG first
+    // Try TinyPNG first (via Serverless Function)
     try {
-      if (!import.meta.env.VITE_TINYPNG_API_KEY) {
-        throw new Error('Skip TinyPNG');
-      }
-      console.log('Starting TinyPNG compression...');
+      console.log('Attempting TinyPNG compression...');
       compressedFile = await compressWithTinyPNG(options.file);
       console.log(`TinyPNG Success: ${(options.file.size / 1024).toFixed(2)}KB -> ${(compressedFile.size / 1024).toFixed(2)}KB`);
     } catch (error) {
       // Fallback to local compression
-      console.log('Falling back to local compression...');
+      console.log('Falling back to local compression...', error);
       compressedFile = await compressImage(options.file);
       console.log(`Local Compression: ${(options.file.size / 1024).toFixed(2)}KB -> ${(compressedFile.size / 1024).toFixed(2)}KB`);
     }
